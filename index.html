@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数据排名追踪器</title>
+<style>
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f4f0;color:#1a1a1a;min-height:100vh}
+.header{background:#fff;border-bottom:1px solid #e8e6e0;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:17px;font-weight:600;letter-spacing:-0.3px}
+.header span{font-size:12px;color:#888;background:#f0efe9;padding:4px 10px;border-radius:20px}
+.container{max-width:960px;margin:0 auto;padding:24px 16px}
+.tabs{display:flex;gap:6px;margin-bottom:24px;background:#fff;padding:6px;border-radius:12px;border:1px solid #e8e6e0;width:fit-content}
+.tab{padding:8px 20px;border-radius:8px;cursor:pointer;font-size:14px;color:#666;transition:all 0.15s;border:none;background:none}
+.tab.active{background:#1a1a1a;color:#fff;font-weight:500}
+.tab:hover:not(.active){background:#f0efe9;color:#1a1a1a}
+.section{display:none}
+.section.active{display:block}
+.group-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.card{background:#fff;border:1px solid #e8e6e0;border-radius:14px;padding:18px}
+.card-title{font-size:14px;font-weight:600;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.chip{font-size:11px;color:#999;font-weight:400;background:#f5f4f0;padding:3px 8px;border-radius:10px}
+label{font-size:12px;color:#888;display:block;margin-bottom:5px}
+input[type=date],input[type=number]{width:100%;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:14px;background:#fff;color:#1a1a1a;margin-bottom:12px;outline:none;transition:border 0.15s}
+input[type=date]:focus,input[type=number]:focus{border-color:#1a1a1a}
+.btn{width:100%;padding:9px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.15s}
+.btn:hover{background:#333}
+.btn:active{transform:scale(0.98)}
+.result-box{margin-top:12px;padding:10px 14px;border-radius:10px;font-size:13px;font-weight:500;display:none}
+.result-box.show{display:block}
+.green{background:#eaf3de;color:#27500a}
+.yellow{background:#faeeda;color:#633806}
+.red-box{background:#fcebeb;color:#791f1f}
+.pct-bar-wrap{height:5px;background:#f0efe9;border-radius:3px;margin-top:8px;overflow:hidden}
+.pct-bar{height:5px;border-radius:3px;transition:width 0.4s}
+.g5-card{border-color:#c8dff5;border-left:3px solid #378ADD}
+.result-grid .card{cursor:default}
+.stat-num{font-size:26px;font-weight:700;letter-spacing:-1px;margin:6px 0 2px}
+.stat-label{font-size:11px;color:#999}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 10px;border-bottom:1px solid #eee;color:#888;font-weight:500;font-size:12px}
+td{padding:8px 10px;border-bottom:1px solid #f5f4f0;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500}
+.del-btn{background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:3px 6px;border-radius:5px}
+.del-btn:hover{color:#e24b4a;background:#fff0f0}
+.clear-all{font-size:12px;color:#ccc;background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px}
+.clear-all:hover{color:#e24b4a;background:#fff0f0}
+.section-intro{font-size:13px;color:#888;margin-bottom:20px;line-height:1.6}
+.empty{color:#bbb;font-size:13px;padding:16px 0;text-align:center}
+.load-btn{margin-top:12px;width:100%;padding:9px;background:#f5f4f0;color:#666;border:1px solid #ddd;border-radius:8px;font-size:12px;cursor:pointer}
+.load-btn:hover{background:#eee}
+.range-btn{padding:5px 12px;border:1px solid #ddd;border-radius:20px;background:#fff;font-size:12px;cursor:pointer;color:#666;transition:all 0.15s}
+.range-btn:hover{background:#f0efe9}
+.active-range{background:#1a1a1a!important;color:#fff!important;border-color:#1a1a1a!important}
+
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+</head>
+
+<div class="header">
+  <h1>📊 数据排名追踪器</h1>
+  <span id="today-label"></span><span id="sync-badge" style="font-size:11px;margin-left:8px;padding:3px 8px;border-radius:10px;background:#faeeda;color:#633806">⏳ 连接中...</span><button onclick="refreshData()" style="font-size:11px;margin-left:6px;padding:3px 8px;border-radius:8px;border:1px solid #ddd;background:#f5f4f0;cursor:pointer">🔄 刷新</button><button onclick="resetCache()" style="font-size:11px;margin-left:4px;padding:3px 8px;border-radius:8px;border:1px solid #fca5a5;background:#fff5f5;color:#b91c1c;cursor:pointer">重置数据</button>
+</div>
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('input')">输入数据</button>
+    <button class="tab" onclick="switchTab('result')">查看结果</button>
+    <button class="tab" onclick="switchTab('history')">历史记录</button>
+    <button class="tab" onclick="switchTab('chart')">📈 走势图</button>
+  </div>
+
+  <!-- 输入页 -->
+  <div id="sec-input" class="section active">
+    <p class="section-intro">每天为各组输入一条新数据。前4组保留最近 243 条，第5组保留最近 8 条，最旧的数据自动滚出。</p>
+    <div style="margin-bottom:12px">
+      <button class="load-btn" onclick="loadSampleData()">⚡ 点击加载示例数据（5组历史数据已准备好，可直接体验）</button>
+    </div>
+    <div class="group-grid">
+      <div class="card" id="card1">
+        <div class="card-title">沪深300 PE <span class="chip" id="cnt1">0/243</span></div>
+        <label>日期</label><input type="date" id="d1">
+        <label>数值</label><input type="number" step="any" id="v1" placeholder="沪深300 PE值">
+        <button class="btn" onclick="addData(1)">+ 添加</button>
+        <div class="result-box" id="r1"></div>
+      </div>
+      <div class="card" id="card2">
+        <div class="card-title">沪深300 点位 <span class="chip" id="cnt2">0/243</span></div>
+        <label>日期</label><input type="date" id="d2">
+        <label>数值</label><input type="number" step="any" id="v2" placeholder="沪深300 点位">
+        <button class="btn" onclick="addData(2)">+ 添加</button>
+        <div class="result-box" id="r2"></div>
+      </div>
+      <div class="card" id="card3">
+        <div class="card-title">中证1000 PE <span class="chip" id="cnt3">0/243</span></div>
+        <label>日期</label><input type="date" id="d3">
+        <label>数值</label><input type="number" step="any" id="v3" placeholder="中证1000 PE值">
+        <button class="btn" onclick="addData(3)">+ 添加</button>
+        <div class="result-box" id="r3"></div>
+      </div>
+      <div class="card" id="card4">
+        <div class="card-title">中证1000 点位 <span class="chip" id="cnt4">0/243</span></div>
+        <label>日期</label><input type="date" id="d4">
+        <label>数值</label><input type="number" step="any" id="v4" placeholder="中证1000 点位">
+        <button class="btn" onclick="addData(4)">+ 添加</button>
+        <div class="result-box" id="r4"></div>
+      </div>
+      <div class="card g5-card" id="card5">
+        <div class="card-title">涨停家数 <span class="chip" id="cnt5">0/8</span></div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px">计算8条均值，与 70 比较</div>
+        <label>日期</label><input type="date" id="d5">
+        <label>数值</label><input type="number" step="any" id="v5" placeholder="输入数值">
+        <button class="btn" onclick="addData(5)">+ 添加</button>
+        <div class="result-box" id="r5"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 结果页 -->
+  <div id="sec-result" class="section">
+    <p class="section-intro">基于当前所有历史数据计算的最新排名结果。</p>
+    <div class="group-grid result-grid" id="result-grid"></div>
+  </div>
+
+  <!-- 历史页 -->
+
+  <div id="sec-chart" class="section">
+    <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:#888">显示范围：</span>
+        <button onclick="setChartRange(30)" id="range-30" class="range-btn active-range">近30天</button>
+        <button onclick="setChartRange(60)" id="range-60" class="range-btn">近60天</button>
+        <button onclick="setChartRange(120)" id="range-120" class="range-btn">近120天</button>
+        <button onclick="setChartRange(243)" id="range-243" class="range-btn">全部</button>
+      </div>
+      <div style="display:flex;gap:6px;background:#f0efe9;border-radius:20px;padding:3px">
+        <button id="mode-combined" onclick="setChartMode('combined')" style="padding:5px 14px;border:none;border-radius:16px;font-size:12px;cursor:pointer;background:#1a1a1a;color:#fff">合并</button>
+        <button id="mode-split" onclick="setChartMode('split')" style="padding:5px 14px;border:none;border-radius:16px;font-size:12px;cursor:pointer;background:transparent;color:#666">分开</button>
+      </div>
+    </div>
+
+    <!-- Combined view -->
+    <div id="view-combined">
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>四组数据排名百分位走势</span>
+          <button onclick="openChartModal('combined')" style="font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer">⛶ 放大</button>
+        </div>
+        <canvas id="chart-combined" height="140"></canvas>
+      </div>
+    </div>
+
+    <!-- Split view -->
+    <div id="view-split" style="display:none;display:grid;grid-template-columns:1fr;gap:12px">
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:#2563EB;display:inline-block"></span>沪深300 PE-TTM</span>
+          <button onclick="openChartModal('g1')" style="font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer">⛶ 放大</button>
+        </div>
+        <canvas id="chart-s1" height="80"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:4px;background:#0891B2;display:inline-block;border-radius:2px"></span>沪深300 点位</span>
+          <button onclick="openChartModal('g2')" style="font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer">⛶ 放大</button>
+        </div>
+        <canvas id="chart-s2" height="80"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:12px;border-radius:50%;background:#DC2626;display:inline-block"></span>中证1000 PE-TTM</span>
+          <button onclick="openChartModal('g3')" style="font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer">⛶ 放大</button>
+        </div>
+        <canvas id="chart-s3" height="80"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:12px;height:4px;background:#EA580C;display:inline-block;border-radius:2px"></span>中证1000 点位</span>
+          <button onclick="openChartModal('g4')" style="font-size:12px;padding:4px 10px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer">⛶ 放大</button>
+        </div>
+        <canvas id="chart-s4" height="80"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full screen modal -->
+  <div id="chart-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;flex-direction:column;align-items:center;justify-content:center">
+    <div style="width:95vw;max-width:1100px;background:#fff;border-radius:16px;padding:20px;position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span id="modal-title" style="font-size:16px;font-weight:600"></span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="zoomModal(-1)" style="width:32px;height:32px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer;font-size:16px">−</button>
+          <button onclick="zoomModal(1)" style="width:32px;height:32px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer;font-size:16px">+</button>
+          <button onclick="resetModalZoom()" style="padding:0 10px;height:32px;border:1px solid #ddd;border-radius:6px;background:#f5f4f0;cursor:pointer;font-size:12px">重置</button>
+          <button onclick="closeChartModal()" style="width:32px;height:32px;border:none;border-radius:6px;background:#E24B4A;color:#fff;cursor:pointer;font-size:18px;line-height:1">×</button>
+        </div>
+      </div>
+      <div style="overflow:auto;max-height:70vh" id="modal-scroll">
+        <canvas id="modal-canvas" style="min-width:600px"></canvas>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:#aaa;text-align:center">滚轮缩放 · 拖拽平移</div>
+    </div>
+  </div>
+
+  <div id="sec-history" class="section">
+    <p class="section-intro">点击每组展开查看，可按日期搜索或范围筛选。</p>
+    <div id="history-content"></div>
+  </div>
+</div>
+
+
+<script>
+const CAPS=[243,243,243,243,8];
+const KEY='dtracker2';
+
+const SAMPLE={"g1":[{"date":"2026-05-13","val":14.9313},{"date":"2026-05-12","val":14.8587},{"date":"2026-05-11","val":14.8871},{"date":"2026-05-08","val":14.7378},{"date":"2026-05-07","val":14.7998},{"date":"2026-05-06","val":14.8199},{"date":"2026-04-30","val":14.7241},{"date":"2026-04-29","val":14.7564},{"date":"2026-04-28","val":14.6585},{"date":"2026-04-27","val":14.5875},{"date":"2026-04-24","val":14.5978},{"date":"2026-04-23","val":14.6111},{"date":"2026-04-22","val":14.6155},{"date":"2026-04-21","val":14.5816},{"date":"2026-04-20","val":14.5256},{"date":"2026-04-17","val":14.414},{"date":"2026-04-16","val":14.4405},{"date":"2026-04-15","val":14.3668},{"date":"2026-04-14","val":14.3842},{"date":"2026-04-13","val":14.2641},{"date":"2026-04-10","val":14.2224},{"date":"2026-04-09","val":14.096},{"date":"2026-04-08","val":14.1816},{"date":"2026-04-07","val":13.9009},{"date":"2026-04-03","val":13.9032},{"date":"2026-04-02","val":14.0387},{"date":"2026-04-01","val":14.1133},{"date":"2026-03-31","val":13.8861},{"date":"2026-03-30","val":13.9633},{"date":"2026-03-27","val":13.9147},{"date":"2026-03-26","val":13.8014},{"date":"2026-03-25","val":13.8784},{"date":"2026-03-24","val":13.7557},{"date":"2026-03-23","val":13.6267},{"date":"2026-03-20","val":14.042},{"date":"2026-03-19","val":14.1086},{"date":"2026-03-18","val":14.1998},{"date":"2026-03-17","val":14.1923},{"date":"2026-03-16","val":14.2278},{"date":"2026-03-13","val":14.223},{"date":"2026-03-12","val":14.277},{"date":"2026-03-11","val":14.277},{"date":"2026-03-10","val":14.1791},{"date":"2026-03-09","val":14.1765},{"date":"2026-03-06","val":14.2153},{"date":"2026-03-05","val":14.2086},{"date":"2026-03-04","val":14.1391},{"date":"2026-03-03","val":14.3042},{"date":"2026-03-02","val":14.3041},{"date":"2026-02-27","val":14.1479},{"date":"2026-02-26","val":14.1694},{"date":"2026-02-25","val":14.2218},{"date":"2026-02-24","val":14.1809},{"date":"2026-02-13","val":14.0387},{"date":"2026-02-12","val":14.2324},{"date":"2026-02-11","val":14.2584},{"date":"2026-02-10","val":14.2581},{"date":"2026-02-09","val":14.2306},{"date":"2026-02-06","val":14.0702},{"date":"2026-02-05","val":14.1116},{"date":"2026-02-04","val":14.1592},{"date":"2026-02-03","val":14.0021},{"date":"2026-02-02","val":13.932},{"date":"2026-01-30","val":14.2052},{"date":"2026-01-29","val":14.3431},{"date":"2026-01-28","val":14.2271},{"date":"2026-01-27","val":14.1655},{"date":"2026-01-26","val":14.1734},{"date":"2026-01-23","val":14.1026},{"date":"2026-01-22","val":14.1896},{"date":"2026-01-21","val":14.1987},{"date":"2026-01-20","val":14.2393},{"date":"2026-01-19","val":14.2291},{"date":"2026-01-16","val":14.2354},{"date":"2026-01-15","val":14.3271},{"date":"2026-01-14","val":14.3524},{"date":"2026-01-13","val":14.4525},{"date":"2026-01-12","val":14.4834},{"date":"2026-01-09","val":14.4055},{"date":"2026-01-08","val":14.3472},{"date":"2026-01-07","val":14.4375},{"date":"2026-01-06","val":14.5167},{"date":"2026-01-05","val":14.3316},{"date":"2025-12-31","val":14.1709},{"date":"2025-12-30","val":14.1831},{"date":"2025-12-29","val":14.1555},{"date":"2025-12-26","val":14.1448},{"date":"2025-12-25","val":14.1326},{"date":"2025-12-24","val":14.113},{"date":"2025-12-23","val":14.0924},{"date":"2025-12-22","val":14.0508},{"date":"2025-12-19","val":13.9633},{"date":"2025-12-18","val":13.9566},{"date":"2025-12-17","val":13.957},{"date":"2025-12-16","val":13.7653},{"date":"2025-12-15","val":13.8908},{"date":"2025-12-12","val":13.9067},{"date":"2025-12-11","val":13.8779},{"date":"2025-12-10","val":13.9703},{"date":"2025-12-09","val":14.0316},{"date":"2025-12-08","val":14.0783},{"date":"2025-12-05","val":14.0167},{"date":"2025-12-04","val":13.9542},{"date":"2025-12-03","val":13.9335},{"date":"2025-12-02","val":14.0164},{"date":"2025-12-01","val":14.0523},{"date":"2025-11-28","val":13.9406},{"date":"2025-11-27","val":13.9448},{"date":"2025-11-26","val":13.9207},{"date":"2025-11-25","val":13.9188},{"date":"2025-11-24","val":13.8059},{"date":"2025-11-21","val":13.8698},{"date":"2025-11-20","val":14.1377},{"date":"2025-11-19","val":14.1593},{"date":"2025-11-18","val":14.055},{"date":"2025-11-17","val":14.1341},{"date":"2025-11-14","val":14.236},{"date":"2025-11-13","val":14.4057},{"date":"2025-11-12","val":14.3102},{"date":"2025-11-11","val":14.2707},{"date":"2025-11-10","val":14.3625},{"date":"2025-11-07","val":14.2833},{"date":"2025-11-06","val":14.3277},{"date":"2025-11-05","val":14.1785},{"date":"2025-11-04","val":14.1693},{"date":"2025-11-03","val":14.2016},{"date":"2025-10-31","val":14.1126},{"date":"2025-10-30","val":14.4925},{"date":"2025-10-29","val":14.6135},{"date":"2025-10-28","val":14.6234},{"date":"2025-10-27","val":14.6905},{"date":"2025-10-24","val":14.5553},{"date":"2025-10-23","val":14.4595},{"date":"2025-10-22","val":14.3989},{"date":"2025-10-21","val":14.3717},{"date":"2025-10-20","val":14.2161},{"date":"2025-10-17","val":14.1544},{"date":"2025-10-16","val":14.4072},{"date":"2025-10-15","val":14.3075},{"date":"2025-10-14","val":14.1447},{"date":"2025-10-13","val":14.1895},{"date":"2025-10-10","val":14.2444},{"date":"2025-10-09","val":14.4176},{"date":"2025-09-30","val":14.2256},{"date":"2025-09-29","val":14.1857},{"date":"2025-09-26","val":14.0425},{"date":"2025-09-25","val":14.1324},{"date":"2025-09-24","val":14.0946},{"date":"2025-09-23","val":14.0115},{"date":"2025-09-22","val":13.9708},{"date":"2025-09-19","val":13.9593},{"date":"2025-09-18","val":13.9597},{"date":"2025-09-17","val":14.157},{"date":"2025-09-16","val":14.0878},{"date":"2025-09-15","val":14.1071},{"date":"2025-09-12","val":14.1054},{"date":"2025-09-11","val":14.1782},{"date":"2025-09-10","val":13.9412},{"date":"2025-09-09","val":13.9015},{"date":"2025-09-08","val":13.9836},{"date":"2025-09-05","val":13.9728},{"date":"2025-09-04","val":13.8534},{"date":"2025-09-03","val":14.012},{"date":"2025-09-02","val":14.1427},{"date":"2025-09-01","val":14.1382},{"date":"2025-08-29","val":14.1549},{"date":"2025-08-28","val":14.0991},{"date":"2025-08-27","val":13.8763},{"date":"2025-08-26","val":14.1298},{"date":"2025-08-25","val":14.1847},{"date":"2025-08-22","val":13.9749},{"date":"2025-08-21","val":13.7307},{"date":"2025-08-20","val":13.6708},{"date":"2025-08-19","val":13.5366},{"date":"2025-08-18","val":13.5419},{"date":"2025-08-15","val":13.459},{"date":"2025-08-14","val":13.4252},{"date":"2025-08-13","val":13.4251},{"date":"2025-08-12","val":13.3895},{"date":"2025-08-11","val":13.3008},{"date":"2025-08-08","val":13.3084},{"date":"2025-08-07","val":13.3383},{"date":"2025-08-06","val":13.3132},{"date":"2025-08-05","val":13.289},{"date":"2025-08-04","val":13.1619},{"date":"2025-08-01","val":13.1111},{"date":"2025-07-31","val":13.1822},{"date":"2025-07-30","val":13.3743},{"date":"2025-07-29","val":13.3391},{"date":"2025-07-28","val":13.3297},{"date":"2025-07-25","val":13.3208},{"date":"2025-07-24","val":13.3973},{"date":"2025-07-23","val":13.3535},{"date":"2025-07-22","val":13.3374},{"date":"2025-07-21","val":13.2619},{"date":"2025-07-18","val":13.2014},{"date":"2025-07-17","val":13.1292},{"date":"2025-07-16","val":13.1005},{"date":"2025-07-15","val":13.131},{"date":"2025-07-14","val":13.1552},{"date":"2025-07-11","val":13.1341},{"date":"2025-07-10","val":13.1653},{"date":"2025-07-09","val":13.0932},{"date":"2025-07-08","val":13.0885},{"date":"2025-07-07","val":13.0115},{"date":"2025-07-04","val":13.0533},{"date":"2025-07-03","val":12.9789},{"date":"2025-07-02","val":12.9451},{"date":"2025-07-01","val":12.9392},{"date":"2025-06-30","val":12.892},{"date":"2025-06-27","val":12.8455},{"date":"2025-06-26","val":12.9829},{"date":"2025-06-25","val":12.9957},{"date":"2025-06-24","val":12.8653},{"date":"2025-06-23","val":12.7228},{"date":"2025-06-20","val":12.6687},{"date":"2025-06-19","val":12.6399},{"date":"2025-06-18","val":12.6867},{"date":"2025-06-17","val":12.6536},{"date":"2025-06-16","val":12.5937},{"date":"2025-06-13","val":12.5328},{"date":"2025-06-12","val":12.5891},{"date":"2025-06-11","val":12.6083},{"date":"2025-06-10","val":12.5275},{"date":"2025-06-09","val":12.5731},{"date":"2025-06-06","val":12.5634},{"date":"2025-06-05","val":12.5644},{"date":"2025-06-04","val":12.5353},{"date":"2025-06-03","val":12.5007},{"date":"2025-05-30","val":12.4609},{"date":"2025-05-29","val":12.4879},{"date":"2025-05-28","val":12.4425},{"date":"2025-05-27","val":12.4513},{"date":"2025-05-26","val":12.4872},{"date":"2025-05-23","val":12.5492},{"date":"2025-05-22","val":12.6495},{"date":"2025-05-21","val":12.65},{"date":"2025-05-20","val":12.5918},{"date":"2025-05-19","val":12.5254},{"date":"2025-05-16","val":12.5608},{"date":"2025-05-15","val":12.6349},{"date":"2025-05-14","val":12.7189},{"date":"2025-05-13","val":12.5711}],"g2":[{"date":"2026-05-13","val":4998.34},{"date":"2026-05-12","val":4948.05},{"date":"2026-05-11","val":4951.84},{"date":"2026-05-08","val":4871.91},{"date":"2026-05-07","val":4900.51},{"date":"2026-05-06","val":4877.09},{"date":"2026-04-30","val":4807.31},{"date":"2026-04-29","val":4810.35},{"date":"2026-04-28","val":4758.21},{"date":"2026-04-27","val":4770.95},{"date":"2026-04-24","val":4769.37},{"date":"2026-04-23","val":4786.33},{"date":"2026-04-22","val":4799.63},{"date":"2026-04-21","val":4768.0},{"date":"2026-04-20","val":4757.44},{"date":"2026-04-17","val":4728.67},{"date":"2026-04-16","val":4736.61},{"date":"2026-04-15","val":4685.25},{"date":"2026-04-14","val":4701.28},{"date":"2026-04-13","val":4646.15},{"date":"2026-04-10","val":4636.57},{"date":"2026-04-09","val":4566.22},{"date":"2026-04-08","val":4595.56},{"date":"2026-04-07","val":4440.62},{"date":"2026-04-03","val":4440.79},{"date":"2026-04-02","val":4478.91},{"date":"2026-04-01","val":4526.07},{"date":"2026-03-31","val":4450.05},{"date":"2026-03-30","val":4491.95},{"date":"2026-03-27","val":4502.57},{"date":"2026-03-26","val":4477.53},{"date":"2026-03-25","val":4537.47},{"date":"2026-03-24","val":4474.72},{"date":"2026-03-23","val":4418.0},{"date":"2026-03-20","val":4567.02},{"date":"2026-03-19","val":4583.25},{"date":"2026-03-18","val":4658.33},{"date":"2026-03-17","val":4637.44},{"date":"2026-03-16","val":4671.56},{"date":"2026-03-13","val":4669.14},{"date":"2026-03-12","val":4687.56},{"date":"2026-03-11","val":4704.5},{"date":"2026-03-10","val":4674.76},{"date":"2026-03-09","val":4615.46},{"date":"2026-03-06","val":4660.44},{"date":"2026-03-05","val":4647.69},{"date":"2026-03-04","val":4602.62},{"date":"2026-03-03","val":4655.9},{"date":"2026-03-02","val":4728.67},{"date":"2026-02-27","val":4710.65},{"date":"2026-02-26","val":4726.87},{"date":"2026-02-25","val":4735.89},{"date":"2026-02-24","val":4707.54},{"date":"2026-02-13","val":4660.41},{"date":"2026-02-12","val":4719.58},{"date":"2026-02-11","val":4713.82},{"date":"2026-02-10","val":4724.3},{"date":"2026-02-09","val":4719.06},{"date":"2026-02-06","val":4643.6},{"date":"2026-02-05","val":4670.42},{"date":"2026-02-04","val":4698.68},{"date":"2026-02-03","val":4660.11},{"date":"2026-02-02","val":4605.98},{"date":"2026-01-30","val":4706.34},{"date":"2026-01-29","val":4753.87},{"date":"2026-01-28","val":4717.99},{"date":"2026-01-27","val":4705.69},{"date":"2026-01-26","val":4706.96},{"date":"2026-01-23","val":4702.5},{"date":"2026-01-22","val":4723.71},{"date":"2026-01-21","val":4723.07},{"date":"2026-01-20","val":4718.88},{"date":"2026-01-19","val":4734.46},{"date":"2026-01-16","val":4731.87},{"date":"2026-01-15","val":4751.43},{"date":"2026-01-14","val":4741.93},{"date":"2026-01-13","val":4761.03},{"date":"2026-01-12","val":4789.92},{"date":"2026-01-09","val":4758.92},{"date":"2026-01-08","val":4737.65},{"date":"2026-01-07","val":4776.67},{"date":"2026-01-06","val":4790.69},{"date":"2026-01-05","val":4717.75},{"date":"2025-12-31","val":4629.94},{"date":"2025-12-30","val":4651.28},{"date":"2025-12-29","val":4639.37},{"date":"2025-12-26","val":4657.24},{"date":"2025-12-25","val":4642.54},{"date":"2025-12-24","val":4634.06},{"date":"2025-12-23","val":4620.73},{"date":"2025-12-22","val":4611.62},{"date":"2025-12-19","val":4568.18},{"date":"2025-12-18","val":4552.79},{"date":"2025-12-17","val":4579.88},{"date":"2025-12-16","val":4497.55},{"date":"2025-12-15","val":4552.06},{"date":"2025-12-12","val":4580.95},{"date":"2025-12-11","val":4552.18},{"date":"2025-12-10","val":4591.83},{"date":"2025-12-09","val":4598.22},{"date":"2025-12-08","val":4621.75},{"date":"2025-12-05","val":4584.54},{"date":"2025-12-04","val":4546.57},{"date":"2025-12-03","val":4531.05},{"date":"2025-12-02","val":4554.33},{"date":"2025-12-01","val":4576.49},{"date":"2025-11-28","val":4526.66},{"date":"2025-11-27","val":4515.4},{"date":"2025-11-26","val":4517.63},{"date":"2025-11-25","val":4490.4},{"date":"2025-11-24","val":4448.05},{"date":"2025-11-21","val":4453.61},{"date":"2025-11-20","val":4564.95},{"date":"2025-11-19","val":4588.29},{"date":"2025-11-18","val":4568.19},{"date":"2025-11-17","val":4598.05},{"date":"2025-11-14","val":4628.14},{"date":"2025-11-13","val":4702.07},{"date":"2025-11-12","val":4645.91},{"date":"2025-11-11","val":4652.17},{"date":"2025-11-10","val":4695.05},{"date":"2025-11-07","val":4678.79},{"date":"2025-11-06","val":4693.4},{"date":"2025-11-05","val":4627.26},{"date":"2025-11-04","val":4618.7},{"date":"2025-11-03","val":4653.4},{"date":"2025-10-31","val":4640.67},{"date":"2025-10-30","val":4709.91},{"date":"2025-10-29","val":4747.84},{"date":"2025-10-28","val":4691.97},{"date":"2025-10-27","val":4716.02},{"date":"2025-10-24","val":4660.68},{"date":"2025-10-23","val":4606.34},{"date":"2025-10-22","val":4592.57},{"date":"2025-10-21","val":4607.87},{"date":"2025-10-20","val":4538.22},{"date":"2025-10-17","val":4514.23},{"date":"2025-10-16","val":4618.42},{"date":"2025-10-15","val":4606.29},{"date":"2025-10-14","val":4539.06},{"date":"2025-10-13","val":4593.98},{"date":"2025-10-10","val":4616.83},{"date":"2025-10-09","val":4709.48},{"date":"2025-09-30","val":4640.69},{"date":"2025-09-29","val":4620.05},{"date":"2025-09-26","val":4550.05},{"date":"2025-09-25","val":4593.49},{"date":"2025-09-24","val":4566.07},{"date":"2025-09-23","val":4519.78},{"date":"2025-09-22","val":4522.61},{"date":"2025-09-19","val":4501.92},{"date":"2025-09-18","val":4498.11},{"date":"2025-09-17","val":4551.02},{"date":"2025-09-16","val":4523.34},{"date":"2025-09-15","val":4533.06},{"date":"2025-09-12","val":4522.0},{"date":"2025-09-11","val":4548.03},{"date":"2025-09-10","val":4445.36},{"date":"2025-09-09","val":4436.26},{"date":"2025-09-08","val":4467.57},{"date":"2025-09-05","val":4460.32},{"date":"2025-09-04","val":4365.21},{"date":"2025-09-03","val":4459.83},{"date":"2025-09-02","val":4490.45},{"date":"2025-09-01","val":4523.71},{"date":"2025-08-29","val":4496.76},{"date":"2025-08-28","val":4463.78},{"date":"2025-08-27","val":4386.13},{"date":"2025-08-26","val":4452.59},{"date":"2025-08-25","val":4469.22},{"date":"2025-08-22","val":4378.0},{"date":"2025-08-21","val":4288.07},{"date":"2025-08-20","val":4271.4},{"date":"2025-08-19","val":4223.37},{"date":"2025-08-18","val":4239.41},{"date":"2025-08-15","val":4202.35},{"date":"2025-08-14","val":4173.31},{"date":"2025-08-13","val":4176.58},{"date":"2025-08-12","val":4143.83},{"date":"2025-08-11","val":4122.51},{"date":"2025-08-08","val":4104.97},{"date":"2025-08-07","val":4114.67},{"date":"2025-08-06","val":4113.49},{"date":"2025-08-05","val":4103.45},{"date":"2025-08-04","val":4070.7},{"date":"2025-08-01","val":4054.93},{"date":"2025-07-31","val":4075.59},{"date":"2025-07-30","val":4151.24},{"date":"2025-07-29","val":4152.02},{"date":"2025-07-28","val":4135.82},{"date":"2025-07-25","val":4127.16},{"date":"2025-07-24","val":4149.04},{"date":"2025-07-23","val":4119.77},{"date":"2025-07-22","val":4118.96},{"date":"2025-07-21","val":4085.61},{"date":"2025-07-18","val":4058.55},{"date":"2025-07-17","val":4034.49},{"date":"2025-07-16","val":4007.2},{"date":"2025-07-15","val":4019.06},{"date":"2025-07-14","val":4017.67},{"date":"2025-07-11","val":4014.81},{"date":"2025-07-10","val":4010.02},{"date":"2025-07-09","val":3991.4},{"date":"2025-07-08","val":3998.45},{"date":"2025-07-07","val":3965.17},{"date":"2025-07-04","val":3982.2},{"date":"2025-07-03","val":3968.07},{"date":"2025-07-02","val":3943.68},{"date":"2025-07-01","val":3942.76},{"date":"2025-06-30","val":3936.08},{"date":"2025-06-27","val":3921.76},{"date":"2025-06-26","val":3946.02},{"date":"2025-06-25","val":3960.07},{"date":"2025-06-24","val":3904.03},{"date":"2025-06-23","val":3857.9},{"date":"2025-06-20","val":3846.64},{"date":"2025-06-19","val":3843.09},{"date":"2025-06-18","val":3874.97},{"date":"2025-06-17","val":3870.38},{"date":"2025-06-16","val":3873.8},{"date":"2025-06-13","val":3864.18},{"date":"2025-06-12","val":3892.2},{"date":"2025-06-11","val":3894.63},{"date":"2025-06-10","val":3865.47},{"date":"2025-06-09","val":3885.25},{"date":"2025-06-06","val":3873.98},{"date":"2025-06-05","val":3877.56},{"date":"2025-06-04","val":3868.74},{"date":"2025-06-03","val":3852.01},{"date":"2025-05-30","val":3840.23},{"date":"2025-05-29","val":3858.7},{"date":"2025-05-28","val":3836.24},{"date":"2025-05-27","val":3839.4},{"date":"2025-05-26","val":3860.11},{"date":"2025-05-23","val":3882.27},{"date":"2025-05-22","val":3913.87},{"date":"2025-05-21","val":3916.38},{"date":"2025-05-20","val":3898.17},{"date":"2025-05-19","val":3877.15},{"date":"2025-05-16","val":3889.09},{"date":"2025-05-15","val":3907.2},{"date":"2025-05-14","val":3943.21},{"date":"2025-05-13","val":3896.26}],"g3":[{"date":"2026-05-13","val":57.567},{"date":"2026-05-12","val":56.7373},{"date":"2026-05-11","val":56.9771},{"date":"2026-05-08","val":56.8192},{"date":"2026-05-07","val":56.5955},{"date":"2026-05-06","val":55.6731},{"date":"2026-04-30","val":54.4361},{"date":"2026-04-29","val":52.7187},{"date":"2026-04-28","val":52.7743},{"date":"2026-04-27","val":52.5833},{"date":"2026-04-24","val":50.4006},{"date":"2026-04-23","val":50.5354},{"date":"2026-04-22","val":51.3371},{"date":"2026-04-21","val":50.9144},{"date":"2026-04-20","val":50.7116},{"date":"2026-04-17","val":50.2497},{"date":"2026-04-16","val":50.2622},{"date":"2026-04-15","val":49.6499},{"date":"2026-04-14","val":49.8196},{"date":"2026-04-13","val":49.1435},{"date":"2026-04-10","val":48.8558},{"date":"2026-04-09","val":48.4838},{"date":"2026-04-08","val":48.8165},{"date":"2026-04-07","val":46.7847},{"date":"2026-04-03","val":46.4098},{"date":"2026-04-02","val":46.7553},{"date":"2026-04-01","val":47.3381},{"date":"2026-03-31","val":46.4488},{"date":"2026-03-30","val":47.2225},{"date":"2026-03-27","val":47.5156},{"date":"2026-03-26","val":46.8954},{"date":"2026-03-25","val":47.6262},{"date":"2026-03-24","val":46.6346},{"date":"2026-03-23","val":45.5163},{"date":"2026-03-20","val":47.7407},{"date":"2026-03-19","val":48.457},{"date":"2026-03-18","val":49.5927},{"date":"2026-03-17","val":49.1764},{"date":"2026-03-16","val":50.3276},{"date":"2026-03-13","val":50.3728},{"date":"2026-03-12","val":51.0986},{"date":"2026-03-11","val":51.2875},{"date":"2026-03-10","val":51.0604},{"date":"2026-03-09","val":50.1581},{"date":"2026-03-06","val":50.4421},{"date":"2026-03-05","val":49.9543},{"date":"2026-03-04","val":49.5331},{"date":"2026-03-03","val":49.8792},{"date":"2026-03-02","val":51.7761},{"date":"2026-02-27","val":52.355},{"date":"2026-02-26","val":51.987},{"date":"2026-02-25","val":51.6176},{"date":"2026-02-24","val":50.828},{"date":"2026-02-13","val":50.1834},{"date":"2026-02-12","val":50.8155},{"date":"2026-02-11","val":50.3669},{"date":"2026-02-10","val":50.3537},{"date":"2026-02-09","val":50.2298},{"date":"2026-02-06","val":49.1674},{"date":"2026-02-05","val":49.2268},{"date":"2026-02-04","val":50.0895},{"date":"2026-02-03","val":50.0309},{"date":"2026-02-02","val":48.6558},{"date":"2026-01-30","val":50.2892},{"date":"2026-01-29","val":50.6643},{"date":"2026-01-28","val":51.0605},{"date":"2026-01-27","val":50.9044},{"date":"2026-01-26","val":50.8033},{"date":"2026-01-23","val":51.371},{"date":"2026-01-22","val":50.4553},{"date":"2026-01-21","val":50.127},{"date":"2026-01-20","val":49.7291},{"date":"2026-01-19","val":50.1385},{"date":"2026-01-16","val":49.8794},{"date":"2026-01-15","val":49.8567},{"date":"2026-01-14","val":49.8836},{"date":"2026-01-13","val":49.6173},{"date":"2026-01-12","val":50.4836},{"date":"2026-01-09","val":49.3857},{"date":"2026-01-08","val":48.493},{"date":"2026-01-07","val":48.147},{"date":"2026-01-06","val":47.8942},{"date":"2026-01-05","val":47.2296},{"date":"2025-12-31","val":46.3191},{"date":"2025-12-30","val":46.3394},{"date":"2025-12-29","val":46.3306},{"date":"2025-12-26","val":46.4116},{"date":"2025-12-25","val":46.282},{"date":"2025-12-24","val":45.8435},{"date":"2025-12-23","val":45.1887},{"date":"2025-12-22","val":45.2396},{"date":"2025-12-19","val":44.7637},{"date":"2025-12-18","val":44.3871},{"date":"2025-12-17","val":44.4914},{"date":"2025-12-16","val":43.8482},{"date":"2025-12-15","val":44.6044},{"date":"2025-12-12","val":46.6419},{"date":"2025-12-11","val":46.2622},{"date":"2025-12-10","val":46.8909},{"date":"2025-12-09","val":46.6956},{"date":"2025-12-08","val":46.9607},{"date":"2025-12-05","val":46.4939},{"date":"2025-12-04","val":45.9254},{"date":"2025-12-03","val":45.9364},{"date":"2025-12-02","val":46.2994},{"date":"2025-12-01","val":46.7485},{"date":"2025-11-28","val":46.4638},{"date":"2025-11-27","val":45.9658},{"date":"2025-11-26","val":45.9143},{"date":"2025-11-25","val":45.8835},{"date":"2025-11-24","val":45.3098},{"date":"2025-11-21","val":44.7746},{"date":"2025-11-20","val":46.462},{"date":"2025-11-19","val":46.7783},{"date":"2025-11-18","val":47.1629},{"date":"2025-11-17","val":47.6385},{"date":"2025-11-14","val":47.5577},{"date":"2025-11-13","val":48.0591},{"date":"2025-11-12","val":47.4287},{"date":"2025-11-11","val":47.7424},{"date":"2025-11-10","val":47.8895},{"date":"2025-11-07","val":47.7568},{"date":"2025-11-06","val":47.8212},{"date":"2025-11-05","val":47.288},{"date":"2025-11-04","val":47.1186},{"date":"2025-11-03","val":47.7149},{"date":"2025-10-31","val":47.539},{"date":"2025-10-30","val":46.4846},{"date":"2025-10-29","val":47.2603},{"date":"2025-10-28","val":47.1605},{"date":"2025-10-27","val":47.4091},{"date":"2025-10-24","val":47.0154},{"date":"2025-10-23","val":46.448},{"date":"2025-10-22","val":46.5133},{"date":"2025-10-21","val":46.6647},{"date":"2025-10-20","val":46.0243},{"date":"2025-10-17","val":45.6918},{"date":"2025-10-16","val":46.9974},{"date":"2025-10-15","val":47.5028},{"date":"2025-10-14","val":46.8136},{"date":"2025-10-13","val":47.7166},{"date":"2025-10-10","val":47.7798},{"date":"2025-10-09","val":48.4524},{"date":"2025-09-30","val":47.9862},{"date":"2025-09-29","val":47.4701},{"date":"2025-09-26","val":46.8669},{"date":"2025-09-25","val":47.504},{"date":"2025-09-24","val":47.6927},{"date":"2025-09-23","val":46.9273},{"date":"2025-09-22","val":47.3927},{"date":"2025-09-19","val":47.1139},{"date":"2025-09-18","val":47.3153},{"date":"2025-09-17","val":47.7663},{"date":"2025-09-16","val":47.3386},{"date":"2025-09-15","val":46.9266},{"date":"2025-09-12","val":46.9955},{"date":"2025-09-11","val":46.8542},{"date":"2025-09-10","val":45.8287},{"date":"2025-09-09","val":45.8132},{"date":"2025-09-08","val":46.3173},{"date":"2025-09-05","val":45.9181},{"date":"2025-09-04","val":44.6827},{"date":"2025-09-03","val":45.7176},{"date":"2025-09-02","val":46.369},{"date":"2025-09-01","val":47.4891},{"date":"2025-08-29","val":46.8384},{"date":"2025-08-28","val":47.127},{"date":"2025-08-27","val":45.6633},{"date":"2025-08-26","val":46.4324},{"date":"2025-08-25","val":46.3446},{"date":"2025-08-22","val":45.532},{"date":"2025-08-21","val":44.6062},{"date":"2025-08-20","val":44.9647},{"date":"2025-08-19","val":44.5724},{"date":"2025-08-18","val":44.4807},{"date":"2025-08-15","val":43.8286},{"date":"2025-08-14","val":42.9294},{"date":"2025-08-13","val":43.546},{"date":"2025-08-12","val":42.8813},{"date":"2025-08-11","val":42.8159},{"date":"2025-08-08","val":42.0941},{"date":"2025-08-07","val":42.2339},{"date":"2025-08-06","val":42.2567},{"date":"2025-08-05","val":41.8441},{"date":"2025-08-04","val":41.5224},{"date":"2025-08-01","val":41.0566},{"date":"2025-07-31","val":40.9972},{"date":"2025-07-30","val":41.3786},{"date":"2025-07-29","val":41.7095},{"date":"2025-07-28","val":41.4607},{"date":"2025-07-25","val":41.337},{"date":"2025-07-24","val":41.2714},{"date":"2025-07-23","val":40.7049},{"date":"2025-07-22","val":40.8948},{"date":"2025-07-21","val":40.6934},{"date":"2025-07-18","val":40.2794},{"date":"2025-07-17","val":40.1704},{"date":"2025-07-16","val":39.7373},{"date":"2025-07-15","val":39.6075},{"date":"2025-07-14","val":39.7015},{"date":"2025-07-11","val":39.6719},{"date":"2025-07-10","val":39.353},{"date":"2025-07-09","val":39.2528},{"date":"2025-07-08","val":39.33},{"date":"2025-07-07","val":38.844},{"date":"2025-07-04","val":38.7507},{"date":"2025-07-03","val":38.9121},{"date":"2025-07-02","val":38.7141},{"date":"2025-07-01","val":39.0898},{"date":"2025-06-30","val":38.9615},{"date":"2025-06-27","val":38.4748},{"date":"2025-06-26","val":38.2912},{"date":"2025-06-25","val":38.4341},{"date":"2025-06-24","val":38.0171},{"date":"2025-06-23","val":37.3165},{"date":"2025-06-20","val":36.8757},{"date":"2025-06-19","val":37.1449},{"date":"2025-06-18","val":37.646},{"date":"2025-06-17","val":37.6944},{"date":"2025-06-16","val":37.7554},{"date":"2025-06-13","val":39.7281},{"date":"2025-06-12","val":40.3198},{"date":"2025-06-11","val":40.2173},{"date":"2025-06-10","val":40.0791},{"date":"2025-06-09","val":40.4248},{"date":"2025-06-06","val":39.9573},{"date":"2025-06-05","val":40.0495},{"date":"2025-06-04","val":39.8129},{"date":"2025-06-03","val":39.4602},{"date":"2025-05-30","val":39.1651},{"date":"2025-05-29","val":39.5391},{"date":"2025-05-28","val":38.8809},{"date":"2025-05-27","val":39.0181},{"date":"2025-05-26","val":39.1558},{"date":"2025-05-23","val":38.9443},{"date":"2025-05-22","val":39.4633},{"date":"2025-05-21","val":39.8777},{"date":"2025-05-20","val":39.9201},{"date":"2025-05-19","val":39.571},{"date":"2025-05-16","val":39.3463},{"date":"2025-05-15","val":39.2581},{"date":"2025-05-14","val":39.8483},{"date":"2025-05-13","val":40.0408}],"g4":[{"date":"2026-05-13","val":8955.45},{"date":"2026-05-12","val":8821.89},{"date":"2026-05-11","val":8866.78},{"date":"2026-05-08","val":8741.15},{"date":"2026-05-07","val":8714.51},{"date":"2026-05-06","val":8574.56},{"date":"2026-04-30","val":8381.95},{"date":"2026-04-29","val":8343.07},{"date":"2026-04-28","val":8226.69},{"date":"2026-04-27","val":8338.73},{"date":"2026-04-24","val":8304.14},{"date":"2026-04-23","val":8362.74},{"date":"2026-04-22","val":8481.24},{"date":"2026-04-21","val":8351.16},{"date":"2026-04-20","val":8357.81},{"date":"2026-04-17","val":8307.44},{"date":"2026-04-16","val":8232.98},{"date":"2026-04-15","val":8106.16},{"date":"2026-04-14","val":8144.76},{"date":"2026-04-13","val":8025.57},{"date":"2026-04-10","val":7998.23},{"date":"2026-04-09","val":7921.45},{"date":"2026-04-08","val":7955.77},{"date":"2026-04-07","val":7606.02},{"date":"2026-04-03","val":7536.6},{"date":"2026-04-02","val":7623.42},{"date":"2026-04-01","val":7764.15},{"date":"2026-03-31","val":7619.85},{"date":"2026-03-30","val":7767.93},{"date":"2026-03-27","val":7746.31},{"date":"2026-03-26","val":7639.38},{"date":"2026-03-25","val":7751.18},{"date":"2026-03-24","val":7600.86},{"date":"2026-03-23","val":7409.11},{"date":"2026-03-20","val":7783.43},{"date":"2026-03-19","val":7909.23},{"date":"2026-03-18","val":8096.59},{"date":"2026-03-17","val":8019.86},{"date":"2026-03-16","val":8211.35},{"date":"2026-03-13","val":8214.29},{"date":"2026-03-12","val":8335.91},{"date":"2026-03-11","val":8363.53},{"date":"2026-03-10","val":8350.09},{"date":"2026-03-09","val":8203.87},{"date":"2026-03-06","val":8248.86},{"date":"2026-03-05","val":8171.12},{"date":"2026-03-04","val":8094.52},{"date":"2026-03-03","val":8142.45},{"date":"2026-03-02","val":8476.97},{"date":"2026-02-27","val":8560.84},{"date":"2026-02-26","val":8490.62},{"date":"2026-02-25","val":8426.33},{"date":"2026-02-24","val":8299.77},{"date":"2026-02-13","val":8204.83},{"date":"2026-02-12","val":8314.83},{"date":"2026-02-11","val":8239.51},{"date":"2026-02-10","val":8250.3},{"date":"2026-02-09","val":8233.78},{"date":"2026-02-06","val":8051.57},{"date":"2026-02-05","val":8068.08},{"date":"2026-02-04","val":8207.12},{"date":"2026-02-03","val":8209.1},{"date":"2026-02-02","val":7975.43},{"date":"2026-01-30","val":8254.86},{"date":"2026-01-29","val":8332.21},{"date":"2026-01-28","val":8399.79},{"date":"2026-01-27","val":8382.15},{"date":"2026-01-26","val":8365.43},{"date":"2026-01-23","val":8470.74},{"date":"2026-01-22","val":8309.35},{"date":"2026-01-21","val":8247.68},{"date":"2026-01-20","val":8182.75},{"date":"2026-01-19","val":8265.65},{"date":"2026-01-16","val":8232.73},{"date":"2026-01-15","val":8240.78},{"date":"2026-01-14","val":8257.17},{"date":"2026-01-13","val":8203.13},{"date":"2026-01-12","val":8357.01},{"date":"2026-01-09","val":8129.18},{"date":"2026-01-08","val":7971.59},{"date":"2026-01-07","val":7906.42},{"date":"2026-01-06","val":7864.9},{"date":"2026-01-05","val":7753.88},{"date":"2025-12-31","val":7595.28},{"date":"2025-12-30","val":7597.3},{"date":"2025-12-29","val":7594.16},{"date":"2025-12-26","val":7605.53},{"date":"2025-12-25","val":7579.38},{"date":"2025-12-24","val":7506.38},{"date":"2025-12-23","val":7392.42},{"date":"2025-12-22","val":7408.35},{"date":"2025-12-19","val":7329.81},{"date":"2025-12-18","val":7272.4},{"date":"2025-12-17","val":7288.74},{"date":"2025-12-16","val":7181.62},{"date":"2025-12-15","val":7309.08},{"date":"2025-12-12","val":7370.94},{"date":"2025-12-11","val":7312.0},{"date":"2025-12-10","val":7408.24},{"date":"2025-12-09","val":7380.58},{"date":"2025-12-08","val":7423.05},{"date":"2025-12-05","val":7342.49},{"date":"2025-12-04","val":7248.66},{"date":"2025-12-03","val":7248.27},{"date":"2025-12-02","val":7313.18},{"date":"2025-12-01","val":7386.68},{"date":"2025-11-28","val":7334.21},{"date":"2025-11-27","val":7257.45},{"date":"2025-11-26","val":7248.45},{"date":"2025-11-25","val":7249.95},{"date":"2025-11-24","val":7156.41},{"date":"2025-11-21","val":7067.7},{"date":"2025-11-20","val":7340.41},{"date":"2025-11-19","val":7387.21},{"date":"2025-11-18","val":7448.1},{"date":"2025-11-17","val":7523.08},{"date":"2025-11-14","val":7502.76},{"date":"2025-11-13","val":7590.58},{"date":"2025-11-12","val":7486.38},{"date":"2025-11-11","val":7540.79},{"date":"2025-11-10","val":7563.25},{"date":"2025-11-07","val":7541.88},{"date":"2025-11-06","val":7551.83},{"date":"2025-11-05","val":7464.86},{"date":"2025-11-04","val":7435.73},{"date":"2025-11-03","val":7538.12},{"date":"2025-10-31","val":7506.67},{"date":"2025-10-30","val":7485.08},{"date":"2025-10-29","val":7569.12},{"date":"2025-10-28","val":7479.22},{"date":"2025-10-27","val":7495.38},{"date":"2025-10-24","val":7419.24},{"date":"2025-10-23","val":7308.1},{"date":"2025-10-22","val":7312.21},{"date":"2025-10-21","val":7344.05},{"date":"2025-10-20","val":7239.18},{"date":"2025-10-17","val":7185.48},{"date":"2025-10-16","val":7401.84},{"date":"2025-10-15","val":7483.45},{"date":"2025-10-14","val":7373.15},{"date":"2025-10-13","val":7519.76},{"date":"2025-10-10","val":7533.82},{"date":"2025-10-09","val":7648.05},{"date":"2025-09-30","val":7574.96},{"date":"2025-09-29","val":7497.83},{"date":"2025-09-26","val":7397.59},{"date":"2025-09-25","val":7506.51},{"date":"2025-09-24","val":7534.22},{"date":"2025-09-23","val":7408.07},{"date":"2025-09-22","val":7489.48},{"date":"2025-09-19","val":7438.19},{"date":"2025-09-18","val":7476.4},{"date":"2025-09-17","val":7554.81},{"date":"2025-09-16","val":7483.63},{"date":"2025-09-15","val":7415.57},{"date":"2025-09-12","val":7422.88},{"date":"2025-09-11","val":7399.89},{"date":"2025-09-10","val":7230.17},{"date":"2025-09-09","val":7226.03},{"date":"2025-09-08","val":7311.03},{"date":"2025-09-05","val":7245.67},{"date":"2025-09-04","val":7041.15},{"date":"2025-09-03","val":7206.88},{"date":"2025-09-02","val":7313.88},{"date":"2025-09-01","val":7501.15},{"date":"2025-08-29","val":7438.68},{"date":"2025-08-28","val":7447.11},{"date":"2025-08-27","val":7336.5},{"date":"2025-08-26","val":7476.47},{"date":"2025-08-25","val":7477.73},{"date":"2025-08-22","val":7362.94},{"date":"2025-08-21","val":7253.34},{"date":"2025-08-20","val":7305.46},{"date":"2025-08-19","val":7242.85},{"date":"2025-08-18","val":7237.6},{"date":"2025-08-15","val":7117.5},{"date":"2025-08-14","val":6976.49},{"date":"2025-08-13","val":7064.33},{"date":"2025-08-12","val":6963.61},{"date":"2025-08-11","val":6943.94},{"date":"2025-08-08","val":6838.13},{"date":"2025-08-07","val":6862.15},{"date":"2025-08-06","val":6861.31},{"date":"2025-08-05","val":6787.48},{"date":"2025-08-04","val":6739.69},{"date":"2025-08-01","val":6670.47},{"date":"2025-07-31","val":6661.19},{"date":"2025-07-30","val":6718.48},{"date":"2025-07-29","val":6773.88},{"date":"2025-07-28","val":6729.98},{"date":"2025-07-25","val":6706.61},{"date":"2025-07-24","val":6701.12},{"date":"2025-07-23","val":6607.22},{"date":"2025-07-22","val":6637.1},{"date":"2025-07-21","val":6612.26},{"date":"2025-07-18","val":6552.07},{"date":"2025-07-17","val":6535.67},{"date":"2025-07-16","val":6462.06},{"date":"2025-07-15","val":6442.83},{"date":"2025-07-14","val":6462.31},{"date":"2025-07-11","val":6461.1},{"date":"2025-07-10","val":6406.57},{"date":"2025-07-09","val":6390.47},{"date":"2025-07-08","val":6407.7},{"date":"2025-07-07","val":6327.14},{"date":"2025-07-04","val":6312.2},{"date":"2025-07-03","val":6342.64},{"date":"2025-07-02","val":6309.48},{"date":"2025-07-01","val":6373.77},{"date":"2025-06-30","val":6356.18},{"date":"2025-06-27","val":6276.94},{"date":"2025-06-26","val":6247.79},{"date":"2025-06-25","val":6276.16},{"date":"2025-06-24","val":6194.67},{"date":"2025-06-23","val":6078.22},{"date":"2025-06-20","val":5999.59},{"date":"2025-06-19","val":6048.22},{"date":"2025-06-18","val":6135.39},{"date":"2025-06-17","val":6141.47},{"date":"2025-06-16","val":6147.46},{"date":"2025-06-13","val":6106.01},{"date":"2025-06-12","val":6192.22},{"date":"2025-06-11","val":6186.51},{"date":"2025-06-10","val":6161.69},{"date":"2025-06-09","val":6218.96},{"date":"2025-06-06","val":6152.84},{"date":"2025-06-05","val":6167.01},{"date":"2025-06-04","val":6123.17},{"date":"2025-06-03","val":6070.04},{"date":"2025-05-30","val":6026.56},{"date":"2025-05-29","val":6089.58},{"date":"2025-05-28","val":5984.46},{"date":"2025-05-27","val":6008.46},{"date":"2025-05-26","val":6028.79},{"date":"2025-05-23","val":5989.68},{"date":"2025-05-22","val":6066.1},{"date":"2025-05-21","val":6132.18},{"date":"2025-05-20","val":6146.02},{"date":"2025-05-19","val":6095.34},{"date":"2025-05-16","val":6068.12},{"date":"2025-05-15","val":6057.04},{"date":"2025-05-14","val":6160.37},{"date":"2025-05-13","val":6151.01}],"g5":[],"ev1":[],"ev2":[],"ev3":[],"ev4":[],"ev5":[]};
+
+const JSONBIN_KEY = '$2a$10$SpoMZ0XeGc.jH5tBQZSYeOvwZuVeZ5MB6On0.kbYBrnWvqDdyM3ay';
+const JSONBIN_URL = 'https://api.jsonbin.io/v3/b';
+let BIN_ID = '6a03244dc0954111d8110a0e'; localStorage.setItem('tracker_bin_id', BIN_ID);
+let _mem = null;
+let _syncing = false;
+
+function setSyncBadge(text, ok) {
+  const el = document.getElementById('sync-badge');
+  if (!el) return;
+  el.textContent = text;
+  el.style.background = ok ? '#eaf3de' : ok === false ? '#fcebeb' : '#faeeda';
+  el.style.color = ok ? '#27500a' : ok === false ? '#791f1f' : '#633806';
+}
+
+async function loadFromCloud() {
+  setSyncBadge('⏳ 加载中...', null);
+  try {
+    if (!BIN_ID) {
+      // first time: create bin with sample data
+      const initData = Object.assign({ev1:[],ev2:[],ev3:[],ev4:[],ev5:[]}, JSON.parse(JSON.stringify(SAMPLE)));
+      const res = await fetch(JSONBIN_URL, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-Master-Key': JSONBIN_KEY,'X-Bin-Name':'tracker'},
+        body: JSON.stringify(initData)
+      });
+      const json = await res.json();
+      BIN_ID = json.metadata.id;
+      localStorage.setItem('tracker_bin_id', BIN_ID);
+      _mem = initData;
+    } else {
+      const res = await fetch(JSONBIN_URL + '/' + BIN_ID + '/latest', {
+        headers: {'X-Master-Key': JSONBIN_KEY}
+      });
+      const json = await res.json();
+      _mem = json.record;
+    }
+    setSyncBadge('🟢 已同步', true);
+    return _mem;
+  } catch(e) {
+    setSyncBadge('⚠️ 网络错误', false);
+    if (!_mem) _mem = Object.assign({ev1:[],ev2:[],ev3:[],ev4:[],ev5:[]}, JSON.parse(JSON.stringify(SAMPLE)));
+    return _mem;
+  }
+}
+
+async function saveToCloud(d) {
+  _mem = d;
+  try { localStorage.setItem('dtracker2', JSON.stringify(d)); } catch(e) {}
+  if (!BIN_ID) return;
+  setSyncBadge('⏳ 保存中...', null);
+  try {
+    await fetch(JSONBIN_URL + '/' + BIN_ID, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json','X-Master-Key': JSONBIN_KEY},
+      body: JSON.stringify(d)
+    });
+    setSyncBadge('🟢 已同步', true);
+  } catch(e) {
+    setSyncBadge('⚠️ 保存失败', false);
+  }
+}
+
+function load() {
+  if (_mem) return _mem;
+  try {
+    const s = localStorage.getItem('dtracker2');
+    if (s) { _mem = JSON.parse(s); return _mem; }
+  } catch(e) {}
+  _mem = Object.assign({ev1:[],ev2:[],ev3:[],ev4:[],ev5:[]}, JSON.parse(JSON.stringify(SAMPLE)));
+  return _mem;
+}
+
+function save(d) {
+  saveToCloud(d);
+}
+
+function todayStr(){return new Date().toISOString().slice(0,10)}
+
+function loadSampleData(){
+  if(!confirm('加载示例数据（会覆盖现有数据），确认吗？')) return;
+  save(SAMPLE);
+  updateCounts();
+  document.querySelector('.load-btn').textContent='✅ 示例数据已加载！切换到「查看结果」标签查看';
+  document.querySelector('.load-btn').style.background='#eaf3de';
+  document.querySelector('.load-btn').style.color='#27500a';
+}
+
+function init(){
+  document.getElementById('today-label').textContent=todayStr();
+  for(let i=1;i<=5;i++) document.getElementById('d'+i).value=todayStr();
+  loadFromCloud().then(() => {
+    updateCounts();
+  });
+}
+
+function updateCounts(){
+  const d=load();
+  for(let i=1;i<=5;i++) document.getElementById('cnt'+i).textContent=d['g'+i].length+'/'+CAPS[i-1];
+}
+
+function addData(g){
+  const date=document.getElementById('d'+g).value;
+  const val=parseFloat(document.getElementById('v'+g).value);
+  if(!date||isNaN(val)){showRes(g,'<span style="color:#e24b4a">请填写日期和数值</span>','');return;}
+  const d=load();
+  const arr=d['g'+g];
+  arr.push({date,val});
+  arr.sort((a,b)=>a.date.localeCompare(b.date));
+  if(!d['ev'+g]) d['ev'+g]=[];
+  while(arr.length>CAPS[g-1]){
+    const evicted=arr.shift();
+    evicted.evictedAt=new Date().toISOString().slice(0,10);
+    d['ev'+g].unshift(evicted);
+    if(d['ev'+g].length>100) d['ev'+g].pop();
+  }
+  d['g'+g]=arr;
+  save(d);
+  document.getElementById('v'+g).value='';
+  updateCounts();
+  const res=calcResult(g,arr,val);
+  showRes(g,res.text,res.cls);
+}
+
+function calcResult(g,arr,val){
+  if(g<=4){
+    const sorted=[...arr.map(x=>x.val)].sort((a,b)=>a-b);
+    const rank=sorted.filter(v=>v<val).length+1;
+    const total=arr.length;
+    const pct=total>1?Math.round((rank-1)/(total-1)*100):0;
+    let cls,icon,label;
+    if(pct<=30){cls='green';icon='🟢';label='低位 0–30%'}
+    else if(pct<=60){cls='yellow';icon='🟡';label='中位 30–60%'}
+    else{cls='red-box';icon='🔴';label='高位 60%+'}
+    return {cls,text:`<div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap">
+      <span style="font-size:15px;font-weight:700">${icon} 第${rank}名</span>
+      <span style="font-size:12px;font-weight:400;opacity:0.7">共${total}条</span>
+      <span style="font-size:13px;font-weight:600">排名 ${pct}%</span>
+      <span style="font-size:12px;font-weight:400">${label}</span>
+    </div>
+    <div class="pct-bar-wrap"><div class="pct-bar" style="width:${pct}%;background:${pct<=30?'#639922':pct<=60?'#BA7517':'#E24B4A'}"></div></div>`};
+  } else {
+    const avg=Math.round(arr.reduce((s,x)=>s+x.val,0)/arr.length*100)/100;
+    if(avg>=70) return{cls:'green',text:`✅ 均值 <b>${avg}</b> ≥ 70`};
+    else return{cls:'red-box',text:`⚠️ 均值 <b>${avg}</b> < 70`};
+  }
+}
+
+function showRes(g,text,cls){
+  const el=document.getElementById('r'+g);
+  el.className='result-box show '+(cls||'');
+  el.innerHTML=text;
+}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['input','result','history'][i]===t));
+  document.querySelectorAll('.section').forEach(el=>el.classList.remove('active'));
+  document.getElementById('sec-'+t).classList.add('active');
+  if(t==='result') renderResults();
+  if(t==='history') renderHistory();
+  if(t==='chart') renderCharts();
+}
+
+function renderResults(){
+  const d=load();
+  let html='';
+  for(let g=1;g<=5;g++){
+    const arr=d['g'+g];
+    if(!arr.length){html+=`<div class="card"><div class="card-title">${["","沪深300 PE","沪深300 点位","中证1000 PE","中证1000 点位","涨停家数"][g]}</div><div class="empty">暂无数据</div></div>`;continue;}
+    const latest=arr[arr.length-1];
+    if(g<=4){
+      const sorted=[...arr.map(x=>x.val)].sort((a,b)=>a-b);
+      const rankPos=sorted.filter(v=>v<latest.val).length+1;
+      const pct=arr.length>1?Math.round((rankPos-1)/(arr.length-1)*100):0;
+      const col=pct<=30?'#639922':pct<=60?'#BA7517':'#E24B4A';
+      const bg=pct<=30?'#eaf3de':pct<=60?'#faeeda':'#fcebeb';
+      html+=`<div class="card"><div class="card-title">${["","沪深300 PE","沪深300 点位","中证1000 PE","中证1000 点位","涨停家数"][g]} <span class="chip">${arr.length}/${CAPS[g-1]}</span></div>
+      <div style="font-size:12px;color:#999;margin-bottom:4px">最新: ${latest.date} · ${latest.val}</div>
+      <div class="stat-num" style="color:${col}">${pct}%</div>
+      <div style="font-size:13px;color:#666;margin:2px 0 6px">第 <b>${rankPos}</b> 名 / 共 ${arr.length} 条</div>
+      <div class="pct-bar-wrap" style="margin-top:4px"><div class="pct-bar" style="width:${pct}%;background:${col}"></div></div>
+      <span class="badge" style="background:${bg};color:${col};margin-top:8px">${pct<=30?'低位 0–30%':pct<=60?'中位 30–60%':'高位 60%+'}</span></div>`;
+    } else {
+      const avg=Math.round(arr.reduce((s,x)=>s+x.val,0)/arr.length*100)/100;
+      const ok=avg>=70;
+      html+=`<div class="card g5-card"><div class="card-title">涨停家数 <span class="chip">${arr.length}/${CAPS[4]}</span></div>
+      <div style="font-size:12px;color:#999;margin-bottom:4px">最新: ${latest.date} · ${latest.val}</div>
+      <div class="stat-num" style="color:${ok?'#27500a':'#791f1f'}">${avg}</div>
+      <div class="stat-label">8条均值</div>
+      <span class="badge" style="background:${ok?'#eaf3de':'#fcebeb'};color:${ok?'#27500a':'#791f1f'};margin-top:8px">${ok?'✅ 均值 ≥ 70':'⚠️ 均值 < 70'}</span></div>`;
+    }
+  }
+  document.getElementById('result-grid').innerHTML=html;
+}
+
+// Track which groups are expanded and their search state
+const _histState = {expanded:{}, search:{}, dateFrom:{}, dateTo:{}};
+
+function renderHistory(){
+  const d=load();
+  const names=["","沪深300 PE","沪深300 点位","中证1000 PE","中证1000 点位","涨停家数"];
+  let html='';
+  for(let g=1;g<=5;g++){
+    const arr=[...d['g'+g]].reverse();
+    const evArr=d['ev'+g]||[];
+    const isOpen=_histState.expanded[g]||false;
+    const search=_histState.search[g]||'';
+    const dateFrom=_histState.dateFrom[g]||'';
+    const dateTo=_histState.dateTo[g]||'';
+
+    html+=`<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none" onclick="toggleHistory(${g})">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:15px;font-weight:600">${names[g]}</span>
+          <span class="chip">${arr.length}/${CAPS[g-1]}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="clear-all" onclick="event.stopPropagation();clearGroup(${g})">清空</button>
+          <span style="font-size:18px;color:#999;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">⌄</span>
+        </div>
+      </div>`;
+
+    if(isOpen){
+      // Search bar
+      html+=`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input type="text" placeholder="搜索日期 如 2026-05" value="${search}"
+          oninput="_histState.search[${g}]=this.value;renderHistoryGroup(${g})"
+          style="border:1px solid #ddd;border-radius:8px;padding:6px 10px;font-size:13px;width:150px;outline:none">
+        <input type="date" value="${dateFrom}"
+          onchange="_histState.dateFrom[${g}]=this.value;renderHistoryGroup(${g})"
+          style="border:1px solid #ddd;border-radius:8px;padding:5px 8px;font-size:12px;outline:none">
+        <span style="font-size:12px;color:#999">至</span>
+        <input type="date" value="${dateTo}"
+          onchange="_histState.dateTo[${g}]=this.value;renderHistoryGroup(${g})"
+          style="border:1px solid #ddd;border-radius:8px;padding:5px 8px;font-size:12px;outline:none">
+        <button onclick="_histState.search[${g}]='';_histState.dateFrom[${g}]='';_histState.dateTo[${g}]='';renderHistoryGroup(${g})"
+          style="font-size:12px;color:#999;background:none;border:none;cursor:pointer;padding:4px 8px">清除筛选</button>
+      </div>
+      <div id="hist-body-${g}" style="margin-top:10px"></div>`;
+    }
+
+    html+=`</div>`;
+  }
+  document.getElementById('history-content').innerHTML=html;
+  // Render open groups
+  for(let g=1;g<=5;g++){
+    if(_histState.expanded[g]) renderHistoryGroup(g);
+  }
+}
+
+function toggleHistory(g){
+  _histState.expanded[g]=!_histState.expanded[g];
+  renderHistory();
+}
+
+function renderHistoryGroup(g){
+  const d=load();
+  const search=(_histState.search[g]||'').toLowerCase();
+  const dateFrom=_histState.dateFrom[g]||'';
+  const dateTo=_histState.dateTo[g]||'';
+  const arr=[...d['g'+g]].reverse();
+  const evArr=d['ev'+g]||[];
+
+  // Filter
+  let filtered=arr.filter(item=>{
+    if(search && !item.date.includes(search)) return false;
+    if(dateFrom && item.date < dateFrom) return false;
+    if(dateTo && item.date > dateTo) return false;
+    return true;
+  });
+
+  let html='';
+  if(!arr.length){
+    html=`<div class="empty">暂无数据</div>`;
+  } else {
+    const origArr=d['g'+g];
+    const sorted=[...origArr.map(x=>x.val)].sort((a,b)=>a-b);
+    html+=`<div style="font-size:12px;color:#999;margin-bottom:8px">显示 ${filtered.length} / ${arr.length} 条</div>`;
+    html+=`<table><thead><tr><th>日期</th><th>数值</th>${g<=4?'<th>排名%</th>':''}<th></th></tr></thead><tbody>`;
+    filtered.forEach(item=>{
+      if(g<=4){
+        const pct=origArr.length>1?Math.round((sorted.filter(v=>v<item.val).length)/(origArr.length-1)*100):0;
+        const bg=pct<=30?'#eaf3de':pct<=60?'#faeeda':'#fcebeb';
+        const col=pct<=30?'#27500a':pct<=60?'#633806':'#791f1f';
+        const rankPos2=sorted.filter(v=>v<item.val).length+1;
+        html+=`<tr><td>${item.date}</td><td>${item.val}</td><td><span class="badge" style="background:${bg};color:${col}">第${rankPos2}名·${pct}%</span></td><td><button class="del-btn" onclick="delItem(${g},'${item.date}')">✕</button></td></tr>`;
+      } else {
+        html+=`<tr><td>${item.date}</td><td>${item.val}</td><td><button class="del-btn" onclick="delItem(${g},'${item.date}')">✕</button></td></tr>`;
+      }
+    });
+    html+=`</tbody></table>`;
+  }
+
+  // Evicted section
+  if(evArr.length){
+    html+=`<div style="margin-top:14px;padding-top:12px;border-top:1px dashed #eee">
+    <div style="font-size:12px;font-weight:600;color:#999;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+      <span style="background:#f5f4f0;padding:2px 8px;border-radius:10px">📤 已滚出记录 (${evArr.length}条)</span>
+      <button class="clear-all" onclick="clearEvicted(${g})" style="font-size:11px">清空</button>
+    </div>
+    <table><thead><tr><th>原始日期</th><th>数值</th><th>滚出时间</th></tr></thead><tbody>`;
+    evArr.forEach(item=>{
+      html+=`<tr style="opacity:0.6"><td>${item.date}</td><td>${item.val}</td><td style="color:#aaa;font-size:12px">${item.evictedAt||'—'}</td></tr>`;
+    });
+    html+=`</tbody></table></div>`;
+  }
+
+  const el=document.getElementById(`hist-body-${g}`);
+  if(el) el.innerHTML=html;
+}
+
+function delItem(g,date){
+  const d=load();d['g'+g]=d['g'+g].filter(x=>x.date!==date);save(d);updateCounts();renderHistory();
+}
+function clearGroup(g){
+  if(!confirm('确认清空第'+g+'组所有数据？'))return;
+  const d=load();d['g'+g]=[];save(d);updateCounts();renderHistory();
+}
+function clearEvicted(g){
+  if(!confirm('确认清空第'+g+'组的滚出记录？'))return;
+  const d=load();d['ev'+g]=[];save(d);renderHistory();
+}
+
+
+
+// Register background zone plugin for charts
+const bgZonePlugin = {
+  id: 'bgZones',
+  beforeDraw(chart) {
+    const {ctx, chartArea: {left, right, top, bottom}, scales: {y}} = chart;
+    if (!y) return;
+    ctx.save();
+    // Green zone: 0-30%
+    const y30 = y.getPixelForValue(30);
+    const y0 = y.getPixelForValue(0);
+    ctx.fillStyle = 'rgba(99,153,34,0.08)';
+    ctx.fillRect(left, y30, right-left, y0-y30);
+    // Yellow zone: 30-60%
+    const y60 = y.getPixelForValue(60);
+    ctx.fillStyle = 'rgba(186,117,23,0.08)';
+    ctx.fillRect(left, y60, right-left, y30-y60);
+    // Red zone: 60-100%
+    const y100 = y.getPixelForValue(100);
+    ctx.fillStyle = 'rgba(226,75,74,0.08)';
+    ctx.fillRect(left, y100, right-left, y60-y100);
+    // Zone labels on right side
+    const labelX = right + 6;
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#791f1f';
+    ctx.fillText('高位', labelX, y100+(y60-y100)/2+4);
+    ctx.fillStyle = '#633806';
+    ctx.fillText('中位', labelX, y60+(y30-y60)/2+4);
+    ctx.fillStyle = '#27500a';
+    ctx.fillText('低位', labelX, y30+(y0-y30)/2+4);
+    ctx.restore();
+  }
+};
+Chart.register(bgZonePlugin);
+
+let _charts = {};
+let _chartRange = 30;
+let _chartMode = "combined";
+let _modalChart = null;
+let _modalChartId = null;
+
+function setChartMode(mode){
+  _chartMode = mode;
+  document.getElementById('mode-combined').style.background = mode==='combined'?'#1a1a1a':'transparent';
+  document.getElementById('mode-combined').style.color = mode==='combined'?'#fff':'#666';
+  document.getElementById('mode-split').style.background = mode==='split'?'#1a1a1a':'transparent';
+  document.getElementById('mode-split').style.color = mode==='split'?'#fff':'#666';
+  document.getElementById('view-combined').style.display = mode==='combined'?'block':'none';
+  document.getElementById('view-split').style.display = mode==='split'?'grid':'none';
+  renderCharts();
+}
+
+function setChartRange(n){
+  _chartRange = n;
+  document.querySelectorAll('.range-btn').forEach(b=>b.classList.remove('active-range'));
+  document.getElementById('range-'+n).classList.add('active-range');
+  renderCharts();
+}
+
+function buildChartData(g, range){
+  const d = load();
+  const arr = [...(d[g]||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  if(!arr.length) return null;
+  const sorted_vals = [...arr.map(x=>x.val)].sort((a,b)=>a-b);
+  const total = arr.length;
+  const pcts = arr.map(x=>{
+    const rank = sorted_vals.filter(v=>v<x.val).length;
+    return total>1?Math.round(rank/(total-1)*100):0;
+  });
+  const labels = arr.map(x=>x.date.slice(5));
+  const n = Math.min(range, arr.length);
+  return {
+    labels: labels.slice(-n),
+    pcts: pcts.slice(-n),
+    colors: pcts.slice(-n).map(p=>p<=30?'#639922':p<=60?'#BA7517':'#E24B4A'),
+    latest: pcts[pcts.length-1]
+  };
+}
+
+function makeChartConfig(chartData, label, isModal){
+  const n = chartData.labels.length;
+  return {
+    type:'line',
+    data:{
+      labels: chartData.labels,
+      datasets:[{
+        label: label+' 百分位%',
+        data: chartData.pcts,
+        borderColor:'#378ADD',
+        backgroundColor:'rgba(55,138,221,0.06)',
+        borderWidth: isModal?2.5:2,
+        pointRadius: chartData.pcts.map((_,i)=>i===n-1?(isModal?8:5):(isModal?3:2)),
+        pointBackgroundColor: chartData.colors,
+        pointBorderColor: chartData.colors,
+        pointBorderWidth: 1.5,
+        tension:0.3,
+        fill:true,
+      }]
+    },
+    options:{
+      responsive:true,
+      maintainAspectRatio: !isModal,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            title: ctx=>'日期: '+ctx[0].label,
+            label: ctx=>`排名 ${ctx.raw}% · ${ctx.raw<=30?'🟢 低位 0-30%':ctx.raw<=60?'🟡 中位 30-60%':'🔴 高位 60-100%'}`
+          }
+        }
+      },
+      scales:{
+        y:{
+          min:0,max:100,
+          ticks:{
+            callback:v=>{if(v===0)return '0';if(v===30)return '30%';if(v===60)return '60%';if(v===100)return '100%';return ''},
+            stepSize:30,
+            font:{size:isModal?12:10}
+          },
+          grid:{
+            color:ctx=>(ctx.tick.value===30||ctx.tick.value===60)?'rgba(0,0,0,0.2)':'rgba(0,0,0,0.04)',
+            lineWidth:ctx=>(ctx.tick.value===30||ctx.tick.value===60)?1.5:1
+          }
+        },
+        x:{
+          ticks:{maxTicksLimit:isModal?20:8,maxRotation:isModal?45:0,font:{size:isModal?11:10}},
+          grid:{display:false}
+        }
+      }
+    }
+  };
+}
+
+function openChartModal(target){
+  // target: 'combined', 'g1', 'g2', 'g3', 'g4'
+  const isCombined = target==='combined';
+  const titleMap={'combined':'四组数据排名百分位走势（全部）','g1':'沪深300 PE 排名百分位（全部）','g2':'沪深300 点位 排名百分位（全部）','g3':'中证1000 PE 排名百分位（全部）','g4':'中证1000 点位 排名百分位（全部）'};
+  document.getElementById('modal-title').textContent = titleMap[target]||'';
+  const modal = document.getElementById('chart-modal');
+  modal.style.display='flex';
+  const canvas = document.getElementById('modal-canvas');
+  canvas.width = Math.min(window.innerWidth*0.92, 1100);
+  canvas.height = Math.round(canvas.width * 0.42);
+  if(_modalChart){_modalChart.destroy();}
+  const {datasets,sharedLabels}=getChartDatasets(243, isCombined?null:target);
+  _modalChart=new Chart(canvas,{type:'line',data:{labels:sharedLabels,datasets},options:{...getChartOptions(!isCombined,true),responsive:false}});
+  document.body.style.overflow='hidden';
+}
+
+function closeChartModal(){
+  document.getElementById('chart-modal').style.display='none';
+  document.body.style.overflow='';
+}
+
+function zoomModal(dir){
+  const scroll = document.getElementById('modal-scroll');
+  const canvas = document.getElementById('modal-canvas');
+  const step = 100;
+  canvas.style.minWidth = (canvas.offsetWidth + dir*step)+'px';
+}
+
+function resetModalZoom(){
+  document.getElementById('modal-canvas').style.minWidth='600px';
+}
+
+// Close modal on backdrop click
+document.addEventListener('click', e=>{
+  if(e.target.id==='chart-modal') closeChartModal();
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') closeChartModal();
+});
+
+const LINE_COLORS = [
+  {border:'#2563EB', bg:'rgba(37,99,235,0.08)', dash:[]},        // 沪深300 PE - 蓝色实线
+  {border:'#0891B2', bg:'rgba(8,145,178,0.05)', dash:[6,3]},     // 沪深300 点位 - 青色虚线
+  {border:'#DC2626', bg:'rgba(220,38,38,0.06)', dash:[]},        // 中证1000 PE - 红色实线
+  {border:'#EA580C', bg:'rgba(234,88,12,0.05)', dash:[6,3]},     // 中证1000 点位 - 橙色虚线
+];
+
+function getChartDatasets(range, singleG){
+  const groups = singleG
+    ? [{g:singleG, label:{'g1':'沪深300 PE','g2':'沪深300 点位','g3':'中证1000 PE','g4':'中证1000 点位'}[singleG], colorIdx:['g1','g2','g3','g4'].indexOf(singleG)}]
+    : [{g:'g1',label:'沪深300 PE',colorIdx:0},{g:'g2',label:'沪深300 点位',colorIdx:1},{g:'g3',label:'中证1000 PE',colorIdx:2},{g:'g4',label:'中证1000 点位',colorIdx:3}];
+  const datasets=[], d=load();
+  let sharedLabels=[];
+  groups.forEach(({g,label,colorIdx},i)=>{
+    const arr=[...(d[g]||[])].sort((a,b)=>a.date.localeCompare(b.date));
+    if(!arr.length) return;
+    const sv=[...arr.map(x=>x.val)].sort((a,b)=>a-b);
+    const total=arr.length;
+    const n=Math.min(range,arr.length);
+    const sl=arr.slice(-n);
+    const pcts=sl.map(x=>total>1?Math.round(sv.filter(v=>v<x.val).length/(total-1)*100):0);
+    if(i===0) sharedLabels=sl.map(x=>x.date.slice(5));
+    const c=LINE_COLORS[colorIdx];
+    datasets.push({
+      label,data:pcts,
+      borderColor:c.border,backgroundColor:singleG?c.bg:'transparent',
+      borderWidth:2,borderDash:c.dash,
+      pointRadius:pcts.map((_,j)=>j===pcts.length-1?6:2),
+      pointBackgroundColor:c.border,pointBorderColor:'#fff',pointBorderWidth:1.5,
+      tension:0.3,fill:!!singleG,
+    });
+  });
+  return {datasets, sharedLabels};
+}
+
+function getChartOptions(isSingle, isModal){
+  return {
+    responsive:true,
+    interaction:{mode:'index',intersect:false},
+    plugins:{
+      legend:{
+        display:!isSingle,
+        position:'top',
+        labels:{usePointStyle:true,font:{size:12},padding:16},
+        onClick:(e,item,legend)=>{
+          const meta=legend.chart.getDatasetMeta(item.datasetIndex);
+          meta.hidden=!meta.hidden;
+          legend.chart.update();
+        }
+      },
+      tooltip:{callbacks:{
+        title:ctx=>'日期: '+ctx[0].label,
+        label:ctx=>`${isSingle?'':''}${ctx.dataset.label}: ${ctx.raw}% (${ctx.raw<=30?'低位':ctx.raw<=60?'中位':'高位'})`
+      }}
+    },
+    scales:{
+      y:{
+        min:0,max:100,
+        ticks:{callback:v=>{if(v===0)return '0';if(v===30)return '30%';if(v===60)return '60%';if(v===100)return '100%';return ''},stepSize:30,font:{size:isModal?12:10}},
+        grid:{color:ctx=>(ctx.tick.value===30||ctx.tick.value===60)?'rgba(0,0,0,0.2)':'rgba(0,0,0,0.04)',lineWidth:ctx=>(ctx.tick.value===30||ctx.tick.value===60)?1.5:1}
+      },
+      x:{ticks:{maxTicksLimit:isModal?24:10,maxRotation:isModal?45:0,font:{size:isModal?11:10}},grid:{display:false}}
+    }
+  };
+}
+
+function renderCharts() {
+  if(_chartMode==='combined'){
+    const canvas=document.getElementById('chart-combined');
+    if(!canvas) return;
+    const {datasets,sharedLabels}=getChartDatasets(_chartRange,null);
+    if(_charts['combined']){_charts['combined'].destroy();}
+    _charts['combined']=new Chart(canvas,{type:'line',data:{labels:sharedLabels,datasets},options:getChartOptions(false,false)});
+  } else {
+    ['g1','g2','g3','g4'].forEach((g,i)=>{
+      const canvas=document.getElementById('chart-s'+(i+1));
+      if(!canvas) return;
+      const {datasets,sharedLabels}=getChartDatasets(_chartRange,g);
+      const key='split-'+g;
+      if(_charts[key]){_charts[key].destroy();}
+      _charts[key]=new Chart(canvas,{type:'line',data:{labels:sharedLabels,datasets},options:getChartOptions(true,false)});
+    });
+  }
+}
+
+function resetCache(){
+  if(!confirm('确认重置？这会清除本地缓存，重新从云端加载数据。')) return;
+  localStorage.removeItem('dtracker2');
+  localStorage.removeItem('tracker_bin_id');
+  _mem = null;
+  location.reload();
+}
+
+function refreshData(){
+  _mem=null;
+  loadFromCloud().then(()=>{
+    updateCounts();
+    const active=document.querySelector('.section.active');
+    if(active&&active.id==='sec-result') renderResults();
+    if(active&&active.id==='sec-history') renderHistory();
+    if(active&&active.id==='sec-chart') renderCharts();
+  });
+}
+
+init();
+</script>
+</html>
